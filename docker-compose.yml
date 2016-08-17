@@ -3,7 +3,7 @@ version: '2'
 services:
   webapp:
     image: 'fteychene/docker-healthcheck-test-app'
-    build: app
+    build: webapp
     ports:
       - 3333:3333
     depends_on:

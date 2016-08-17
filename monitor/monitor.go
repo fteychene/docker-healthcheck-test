@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-type eventProcessor func(event eventtypes.Message, err error) error
+type eventProcessor func(event eventtypes.Message) error
 
 // DecodeEvents : to decode the events
 func decodeEvents(input io.Reader, ep eventProcessor) error {
@@ -23,11 +23,15 @@ func decodeEvents(input io.Reader, ep eventProcessor) error {
 	for {
 		var event eventtypes.Message
 		err := dec.Decode(&event)
-		if err != nil && err == io.EOF {
-			break
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return err
+			}
 		}
 
-		if procErr := ep(event, err); procErr != nil {
+		if procErr := ep(event); procErr != nil {
 			return procErr
 		}
 	}
@@ -55,7 +59,6 @@ func main() {
 
 	filters := filters.NewArgs()
 	filters.Add("label", fmt.Sprintf("com.docker.compose.project=%s", os.Getenv("COMPOSE_PROJECT_NAME")))
-	// filters.Add("event", "start")
 
 	body, err := cli.Events(context.Background(), types.EventsOptions{
 		Filters: filters,
@@ -65,10 +68,7 @@ func main() {
 	}
 	defer body.Close()
 
-	decodeEvents(body, func(event eventtypes.Message, err error) error {
-		if err != nil {
-			return err
-		}
+	err = decodeEvents(body, func(event eventtypes.Message) error {
 		fmt.Printf("Docker event : \nType : %s Action : %s Id : %s\n", event.Type, event.Action, event.Actor.ID)
 		if event.Action == "start" || healthstatusRegex.MatchString(event.Action) {
 			info, err := inspect(cli, event.Actor.ID)
@@ -79,4 +79,7 @@ func main() {
 		}
 		return nil
 	})
+	if err != nil {
+		panic(err)
+	}
 }
